@@ -10,6 +10,8 @@ Proposed subproblems:
 
 - How should the risk factor be connected to available police resources
 
+- To what do we assign the risk factor
+
 
 
 
