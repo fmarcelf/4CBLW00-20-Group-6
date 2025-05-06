@@ -205,104 +205,7 @@ def create_boundary_visualizations(ward_boundaries):
 
     m.save(output_dir / 'london_burglary_interactive.html')
     print("Boundary visualizations created and saved.")
-
-def load_and_prepare_data():
-    """Load all available burglary data"""
-    print("\n=== Loading and Preparing Data ===")
-    df = pd.read_csv('output_csv_files/burglary_cases.csv')
-    df['Month'] = pd.to_datetime(df['Month'])
-    df['Year'] = df['Month'].dt.year
-    df['Month_num'] = df['Month'].dt.month
-
-    print(f"Loaded {len(df)} total burglary cases from {df['Year'].min()} to {df['Year'].max()}")
-    print(f"Number of unique months: {df['Month'].nunique()}")
-    if df.empty:
-        raise ValueError("No burglary cases found in the dataset.")
-
-    return df
-
-def calculate_ward_level_metrics(df):
-    """Compute burglary stats and risk scores"""
-    print("\n=== Calculating Ward-Level Metrics ===")
-    unresolved_statuses = ['Status update unavailable', 'Court result unavailable', 'Action to be taken by another organisation']
-
-    df['solved'] = ~df['Last outcome category'].isin(unresolved_statuses)
-    ward_stats = df.groupby('LSOA code').agg(
-        burglary_count=('Crime ID', 'count'),
-        clearance_rate=('solved', lambda x: x.mean() * 100)
-    ).reset_index()
-
-    # Risk Score (population data unavailable)
-    ward_stats['risk_score'] = ward_stats['burglary_count'] * (100 - ward_stats['clearance_rate']) / 100
-
-    print("\nTop 10 High-Risk Wards:")
-    print(ward_stats.sort_values('risk_score', ascending=False).head(10))
-    return ward_stats
-
-def create_demand_visualizations(ward_stats):
-    """Generate demand estimation visualizations"""
-    print("\n=== Creating Demand Estimation Visualizations ===")
-    output_dir = Path('demand_estimation_visualizations')
-    output_dir.mkdir(exist_ok=True)
-
-    ward_stats['risk_score'].hist(bins=50, figsize=(12,6))
-    plt.title('Distribution of Ward Risk Scores')
-    plt.xlabel('Risk Score')
-    plt.ylabel('Number of Wards')
-    plt.tight_layout()
-    plt.savefig(output_dir / 'risk_score_distribution.png')
-    plt.close()
-
-    top_20 = ward_stats.sort_values('risk_score', ascending=False).head(20)
-    top_20['risk_score'].plot(kind='bar', figsize=(15, 8))
-    plt.title('Top 20 High-Risk Wards')
-    plt.xlabel('Ward Code')
-    plt.ylabel('Risk Score')
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.savefig(output_dir / 'top_20_high_risk_wards.png')
-    plt.close()
-
-    plt.scatter(ward_stats['clearance_rate'], ward_stats['burglary_count'], alpha=0.5)
-    plt.title('Clearance Rate vs Burglary Count by Ward')
-    plt.xlabel('Clearance Rate (%)')
-    plt.ylabel('Burglary Count')
-    plt.tight_layout()
-    plt.savefig(output_dir / 'clearance_vs_burglary.png')
-    plt.close()
-
-    print("Demand estimation visualizations created and saved.")
-
-def cluster_wards_by_risk(ward_stats):
-    """Cluster wards using K-means"""
-    print("\n=== Clustering Wards by Risk ===")
-    X = ward_stats[['burglary_count', 'clearance_rate']].values
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
-    ward_stats['risk_cluster'] = kmeans.fit_predict(X_scaled)
-
-    cluster_stats = ward_stats.groupby('risk_cluster').agg(
-        burglary_count_mean=('burglary_count', 'mean'),
-        clearance_rate_mean=('clearance_rate', 'mean'),
-        risk_score_mean=('risk_score', 'mean')
-    )
-    print("\nCluster Summary:")
-    print(cluster_stats)
-    return ward_stats
-
-def generate_resource_recommendations(ward_stats):
-    """Allocate resources based on risk score proportion"""
-    print("\n=== Generating Resource Recommendations ===")
-    total_risk = ward_stats['risk_score'].sum()
-    ward_stats['resource_allocation'] = (ward_stats['risk_score'] / total_risk) * 100
-
-    top_wards = ward_stats.sort_values('resource_allocation', ascending=False).head(10)
-    print("\nTop 10 Wards by Resource Allocation:")
-    print(top_wards[['burglary_count', 'clearance_rate', 'risk_score', 'resource_allocation']])
-    return ward_stats
-
+    
 def main():
     """Run full demand estimation analysis"""
     # Load data from CSV files and save to a single CSV
@@ -314,16 +217,5 @@ def main():
     ward_boundaries = map_crimes_to_wards(df, ward_boundaries, lsoa_boundaries)
 
     create_boundary_visualizations(ward_boundaries)
-
-    ward_stats = calculate_ward_level_metrics(df)
-    create_demand_visualizations(ward_stats)
-
-    ward_stats = cluster_wards_by_risk(ward_stats)
-    ward_stats = generate_resource_recommendations(ward_stats)
-
-    ward_stats.to_csv('demand_estimation_results.csv')
-    print("\nResults saved to 'demand_estimation_results.csv'")
-    print("\n=== Demand estimation analysis completed successfully! ===")
-
 if __name__ == "__main__":
     main() 
