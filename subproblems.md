@@ -1,12 +1,10 @@
+# How can we best estimate police demand in an automated manner to inform the most effective use of police resources to reduce residential burglary in London (UK)?
+
 Proposed subproblems:
 
-- Which (external) data is the most important in making the prediction
-
-- What parameters should be taken into account when making the prediction about risk factor
+## Do the index of multiple deprivation (IMD) and house prices data (per LSOA) improve the prediction accuracy of residential burglary in London (UK)?
 
 - How should we define and calculate risk factor
-
-
 
 - How should the risk factor be connected to available police resources
 
