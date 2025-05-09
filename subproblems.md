@@ -7,6 +7,7 @@ Proposed subproblems:
 
 ## ethical question about fairness and interoperability? (Buse)
 
+#How can we ensure the model is ethically sound—taking into account considerations such as fairness and public trust—and how can it predict burglary rate and make resource allocation in the most effective and ethical way possible?
 
 - What tasks should be performed by officers stationed
 
