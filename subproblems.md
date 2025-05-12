@@ -1,18 +1,13 @@
-Proposed subproblems:
+# How can we best estimate police demand in an automated manner to inform the most effective use of police resources to reduce residential burglary in London (UK)?
 
-- Which (external) data is the most important in making the prediction
+## Do the index of multiple deprivation (IMD) and house prices data (per LSOA) improve the prediction accuracy of residential burglary in London (UK)?
+about data
 
-- What parameters should be taken into account when making the prediction about risk factor
+## Does the risk factor, calculated by the ward's area and (...), help allocate the 200 hours per day per ward, between 100 police officers efficiently?
+about modeling
 
-- How should we define and calculate risk factor
-
-
-
-- How should the risk factor be connected to available police resources
-
-- To what do we assign the risk factor
-
-- What tasks should be performed by officers stationed
+## How can we ensure the model is ethically sound, while taking into account considerations such as fairness and public trust, and how can it predict the burglary rate and make resource allocation in the most effective and ethical way possible?
+ethical question about fairness and interoperability:
 
 
 
