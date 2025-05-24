@@ -1,14 +1,8 @@
 import pandas as pd
-import folium
+import copy
 import json
 import streamlit as st
-from streamlit_folium import st_folium
-
-# TODO: Add caching
-# TODO: Clean code, add comments
-# TODO: Improve performance - map reloads every user input
-#       Try using session states for storing whole map on client side
-# TODO: Try database instead of dataframe
+import pydeck as pdk
 
 st.set_page_config(layout="wide")
 
@@ -28,20 +22,23 @@ def filter_data(df, selected_year, selected_month):
     filtered = df[(df['Year'] == selected_year) & (df['Month'] == month_num)]
     return filtered
 
-@st.cache_data
-def create_base_map():
-    m = folium.Map(location=[51.5074, -0.1278], zoom_start=10)
-    # TODO: Add more functionalities
-    return m
+def add_burglaries_to_geojson(geojson, df):
+    burglary_map = df.set_index('LSOA code')['Burglaries'].to_dict()
+    geojson_copy = copy.deepcopy(geojson)
+
+    for feature in geojson_copy['features']:
+        lsoa_code = feature['properties']['LSOA21CD']
+        count = burglary_map.get(lsoa_code, 0)
+        feature['properties']['burglaries'] = int(count)
+
+    return geojson_copy
 
 # Load data
 
-df, data_gjs = load_data()
+df, geojson_data = load_data()
 
 # Create filters
-years = []
-for i in range (2010, 2026):
-    years.append(i)
+years = list(range(2010,2026))
 
 months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
           "November", "December"]
@@ -59,36 +56,69 @@ st.title(" :gb: London Burglary Explorer")
 st.sidebar.header("Parameters")
 selected_year = st.sidebar.selectbox("Year", years)
 selected_month = st.sidebar.selectbox("Month", months)
+# Lsoa selector does not impact anything yet
 selected_lsoa = st.sidebar.selectbox("LSOA code", lsoa)
 
-# Filter data
+month_num = months.index(selected_month) + 1
 filtered = filter_data(df, selected_year, selected_month)
 
-# Create test map on the right
+gjs = add_burglaries_to_geojson(geojson_data, filtered)
 
-m = create_base_map()
+# Create Map
 
-folium.Choropleth(
-        geo_data=data_gjs,
-        data=filtered,
-        columns=['LSOA code', 'Burglaries'],
-        key_on='feature.properties.LSOA21CD',
-        fill_color='YlOrRd',
-        fill_opacity=0.7,
-        line_opacity=0.2,
-        legend_name="Nr of burglaries"
-        ).add_to(m)
+# Create view state for map
+
+view_state = pdk.ViewState(
+        latitude=51.5074,
+        longitude=-0.1278,
+        zoom=10,
+        pitch=0
+        )
+
+# Create base layer
+base_layer = pdk.Layer(
+        "TileLayer",
+        data="https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        min_zoom=0,
+        max_zoom=19,
+        tile_size=256,
+        opacity=1,
+        pickable=False
+        )
+
+# Create GeoJSON layer
+#TODO: Change color filling
+gjs_layer = pdk.Layer(
+        "GeoJsonLayer",
+        gjs,
+        pickable=True,
+        stroked=True,
+        filled=True,
+        extruded=False,
+        get_fill_color="[255, (1 - properties.burglaries / 50) * 255, 0]",
+        get_line_color=[255,255,255],
+        line_width_min_pixels=1
+        )
+
+r = pdk.Deck(
+        layers=[base_layer, gjs_layer],
+        initial_view_state=view_state,
+        tooltip=True
+        )
+
+st.pydeck_chart(r)
 
 
-# Display map
-st_folium(m, width=2000)
-
-# TODO: Display additional LSOA statistics
+# Display additional LSOA statistics
+# Note: Does not match with year/month yet. This is just test.
 
 st.markdown(
         "<h2 style='text-align:center;'> Statistics for Your LSOA</h2>",
         unsafe_allow_html=True
         )
+
+lsoa_stats = df[df['LSOA code'] == selected_lsoa]
+st.write(lsoa_stats)
 
 
 
