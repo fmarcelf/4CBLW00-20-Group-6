@@ -9,7 +9,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # === Configuration ===
 # Replace DATA_PATH with the location of your Data-Transformed.csv - make sure the data is in the same folder as this file
-DATA_PATH    = r"C:/path/to/your/Data-Transformed.csv"
+DATA_PATH    = r"C:/path/to/Data-Transformed.csv"
 
 # Replace MODEL_PATH if you want to save/load the model somewhere else - you can keep it as it is
 MODEL_PATH   = "models/xgb_burglary_model.json"
