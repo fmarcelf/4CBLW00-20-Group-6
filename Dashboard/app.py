@@ -78,12 +78,14 @@ view_state = pdk.ViewState(
 # Create base layer
 base_layer = pdk.Layer(
         "TileLayer",
-        data="https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        data=None,
         min_zoom=0,
         max_zoom=19,
         tile_size=256,
         opacity=1,
-        pickable=False
+        pickable=False,
+        get_tile_data=None,
+        url_template = "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
         )
 
 # Create GeoJSON layer
