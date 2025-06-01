@@ -4,6 +4,8 @@ import json
 import pydeck as pdk
 import pandas as pd
 import numpy as np  # Needed for percentile and clipping
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.title("Exploration Dashboard")
 
@@ -53,6 +55,8 @@ df, geojson_data = load_data()
 years = list(range(2010, 2026))
 months = ["January", "February", "March", "April", "May", "June",
           "July", "August", "September", "October", "November", "December"]
+
+lsoa = sorted(df['LSOA code'].unique())
 
 # Define filter options with the requested order and labels
 filter_options = {
@@ -236,3 +240,28 @@ else:
 
         if missing_combinations:
             st.warning(f"⚠️ No data found for these year-month combinations: {', '.join(missing_combinations)}")
+
+# LSOA inspection
+
+st.header("Select LSOA for inspection")
+selected_lsoa = st.selectbox("LSOA code", lsoa)
+
+lsoa_data = df[df['LSOA code'] == selected_lsoa]
+
+nr_burglaries = lsoa_data['Burglaries'].sum()
+
+st.markdown(
+    f"<h2 style='text-align: center;'>Total Burglaries for {selected_lsoa}: <strong>{int(nr_burglaries):,}</strong></h2>",
+    unsafe_allow_html=True
+)
+
+# Plot burglaries over the years
+plt.figure(figsize=(16,10))
+sns.lineplot(x = lsoa_data['YearMonth'], y = lsoa_data['Burglaries'])
+plt.title(f"Summary of burglaries for {selected_lsoa}")
+plt.xlabel("Date")
+plt.ylabel("Burglary count")
+plt.tight_layout()
+
+# Show plot in Streamlit
+st.pyplot(plt.gcf())
