@@ -225,6 +225,30 @@ else:
 
     st.pydeck_chart(r)
 
+    # Plot data for single LSOA
+    st.header("Select LSOA for inspection")
+    selected_lsoa = st.selectbox("LSOA code", lsoa)
+
+    lsoa_data = filtered[filtered['LSOA code'] == selected_lsoa]
+
+    nr_burglaries = lsoa_data['Burglaries'].sum()
+
+    st.markdown(
+        f"<h2 style='text-align: center;'>Total Burglaries for {selected_lsoa}: <strong>{int(nr_burglaries):,}</strong></h2>",
+        unsafe_allow_html=True
+    )
+
+    # Plot burglaries over the years
+    plt.figure(figsize=(16,10))
+    sns.lineplot(x = lsoa_data['YearMonth'], y = lsoa_data['Burglaries'])
+    plt.title(f"Summary of burglaries for {selected_lsoa}")
+    plt.xlabel("Date")
+    plt.ylabel("Burglary count")
+    plt.tight_layout()
+
+    # Show plot in Streamlit
+    st.pyplot(plt.gcf())
+
     # For custom range, single year, or seasons, no missing combos shown since months/years are fixed or partial
     # For custom range, we can still show missing combos:
     if filter_options[filter_choice] == "custom":
@@ -243,25 +267,24 @@ else:
 
 # LSOA inspection
 
-st.header("Select LSOA for inspection")
-selected_lsoa = st.selectbox("LSOA code", lsoa)
-
-lsoa_data = df[df['LSOA code'] == selected_lsoa]
-
-nr_burglaries = lsoa_data['Burglaries'].sum()
-
-st.markdown(
-    f"<h2 style='text-align: center;'>Total Burglaries for {selected_lsoa}: <strong>{int(nr_burglaries):,}</strong></h2>",
-    unsafe_allow_html=True
-)
-
-# Plot burglaries over the years
-plt.figure(figsize=(16,10))
-sns.lineplot(x = lsoa_data['YearMonth'], y = lsoa_data['Burglaries'])
-plt.title(f"Summary of burglaries for {selected_lsoa}")
-plt.xlabel("Date")
-plt.ylabel("Burglary count")
-plt.tight_layout()
-
-# Show plot in Streamlit
-st.pyplot(plt.gcf())
+# selected_lsoa = st.selectbox("LSOA code", lsoa)
+#
+# lsoa_data = df[df['LSOA code'] == selected_lsoa]
+#
+# nr_burglaries = lsoa_data['Burglaries'].sum()
+#
+# st.markdown(
+#     f"<h2 style='text-align: center;'>Total Burglaries for {selected_lsoa}: <strong>{int(nr_burglaries):,}</strong></h2>",
+#     unsafe_allow_html=True
+# )
+#
+# # Plot burglaries over the years
+# plt.figure(figsize=(16,10))
+# sns.lineplot(x = lsoa_data['YearMonth'], y = lsoa_data['Burglaries'])
+# plt.title(f"Summary of burglaries for {selected_lsoa}")
+# plt.xlabel("Date")
+# plt.ylabel("Burglary count")
+# plt.tight_layout()
+#
+# # Show plot in Streamlit
+# st.pyplot(plt.gcf())
