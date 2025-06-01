@@ -265,3 +265,4 @@ else:
         if missing_combinations:
             st.warning(f"⚠️ No data found for these year-month combinations: {', '.join(missing_combinations)}")
 
+st.markdown("⚠️ Important - Selected filters affect both map and the plot")
