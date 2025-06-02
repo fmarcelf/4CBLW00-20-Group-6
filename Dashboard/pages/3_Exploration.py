@@ -7,7 +7,7 @@ import numpy as np  # Needed for percentile and clipping
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-st.title("Exploration Dashboard")
+st.title("🔍 Exploration Dashboard")
 
 @st.cache_data
 def load_data():
@@ -265,4 +265,4 @@ else:
         if missing_combinations:
             st.warning(f"⚠️ No data found for these year-month combinations: {', '.join(missing_combinations)}")
 
-st.markdown("⚠️ Important - Selected filters affect both map and the plot")
+st.markdown("⚠️ Important: The data filter at the top of this page applies to both the map and the crime trend line chart")
