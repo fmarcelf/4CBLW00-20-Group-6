@@ -80,7 +80,7 @@ if st.session_state.start:
     for i in range(1, 6):
         st.markdown(f"*Task {i}: {tasks[i]['name']}*")
         minutes = st.number_input(f"Minutes for Task {i}", value=float(tasks[i]['default_minutes']), min_value=0.0, key=f"min_{i}")
-        scales_with_area = st.radio(f"Scales with area?", ["Yes", "No"], index=0 if tasks[i]["scales_with_area"] else 1, key=f"scale_{i}")
+        scales_with_area = st.radio(f"Scales with area/per hectare?", ["Yes", "No"], index=0 if tasks[i]["scales_with_area"] else 1, key=f"scale_{i}")
         user_tasks[i] = {"minutes": minutes, "scales_with_area": scales_with_area == "Yes"}
 
     if st.button(f"✅ Optimize allocation for {selected_ward_name} ({selected_ward_code})"):
