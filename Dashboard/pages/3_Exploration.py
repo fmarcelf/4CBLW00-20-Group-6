@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np  # Needed for percentile and clipping
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re
 
 st.title("🔍 Exploration Dashboard")
 
@@ -49,6 +50,16 @@ def add_burglaries_to_geojson(geojson, df):
 
     return geojson_copy
 
+@st.cache_data
+def prepare_lsoa(df):
+    df_copy = df.copy()
+    df_copy['LSOA_lookup'] = df_copy['LSOA name'] + "(" + df_copy['LSOA code'] + ")"
+    lsoa_list = df_copy[['LSOA_lookup','LSOA code', 'LSOA name']].drop_duplicates()
+    lsoa = lsoa_list['LSOA_lookup'].dropna().unique()
+    return lsoa
+
+
+
 # Load data
 df, geojson_data = load_data()
 
@@ -56,7 +67,8 @@ years = list(range(2010, 2026))
 months = ["January", "February", "March", "April", "May", "June",
           "July", "August", "September", "October", "November", "December"]
 
-lsoa = sorted(df['LSOA code'].unique())
+
+lsoa = prepare_lsoa(df)
 
 # Define filter options with the requested order and labels
 filter_options = {
@@ -228,8 +240,13 @@ else:
     # Plot data for single LSOA
     st.header("Select LSOA for inspection")
     selected_lsoa = st.selectbox("LSOA code", lsoa)
+    match = re.search(r'\(([^)]+)\)', selected_lsoa)
+    if match:
+        code = match.group(1)
+    else:
+        code = None
 
-    lsoa_data = filtered[filtered['LSOA code'] == selected_lsoa]
+    lsoa_data = filtered[filtered['LSOA code'] == code]
 
     nr_burglaries = lsoa_data['Burglaries'].sum()
 
@@ -239,11 +256,13 @@ else:
     )
 
     # Plot burglaries over the years
-    plt.figure(figsize=(16,10))
+    plt.figure(figsize=(16,9))
     sns.lineplot(x = lsoa_data['YearMonth'], y = lsoa_data['Burglaries'])
     plt.title(f"Summary of burglaries for {selected_lsoa}")
     plt.xlabel("Date")
     plt.ylabel("Burglary count")
+
+    plt.xticks(rotation=45)
     plt.tight_layout()
 
     # Show plot in Streamlit
