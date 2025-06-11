@@ -53,7 +53,7 @@ def add_burglaries_to_geojson(geojson, df):
 @st.cache_data
 def prepare_lsoa(df):
     df_copy = df.copy()
-    df_copy['LSOA_lookup'] = df_copy['LSOA name'] + "(" + df_copy['LSOA code'] + ")"
+    df_copy['LSOA_lookup'] = df_copy['LSOA name'] + " (" + df_copy['LSOA code'] + ")"
     lsoa_list = df_copy[['LSOA_lookup','LSOA code', 'LSOA name']].drop_duplicates()
     lsoa = lsoa_list['LSOA_lookup'].dropna().unique()
     return lsoa
