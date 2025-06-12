@@ -124,8 +124,7 @@ if st.session_state.start:
             risk_factor = {
                 (i, t): (risk_factors_for_month.get(i, 0.005) * shift_weights[t])
                 for i in lsoa_ids
-                for t in shifts
-            }
+                for t in shifts}
 
             prob = LpProblem("Officer_Allocation", LpMaximize)
             X = {(i, t): LpVariable(f"x_{i}_{t}", lowBound=0, cat=LpInteger) for i in lsoa_ids for t in shifts}
