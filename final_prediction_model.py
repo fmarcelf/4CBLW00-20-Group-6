@@ -504,11 +504,200 @@ print(f"   ✅ Target encoding fit on train only")
 print(f"   ✅ Conservative model parameters")
 print(f"   ✅ Rigorous cross-validation")
 
+# 16) GENERATE 2025 PREDICTIONS (JANUARY, FEBRUARY, MARCH)
+# ==============================================================================
+print("\n" + "="*70)
+print("🔮 GENERATING 2025 PREDICTIONS")
+print("="*70)
+
+# Create dates for January, February, March 2025
+prediction_dates = [
+    pd.Timestamp('2025-01-31'),  # January 2025
+    pd.Timestamp('2025-02-28'),  # February 2025
+    pd.Timestamp('2025-03-31')   # March 2025
+]
+
+# Get unique LSOAs and their ward mappings from the test set
+lsoa_ward_mapping = df_test_clean[['lsoa_code', 'ward_code']].drop_duplicates()
+print(f"Found {len(lsoa_ward_mapping)} unique LSOAs")
+
+# Prepare prediction results
+prediction_results = []
+
+for pred_date in prediction_dates:
+    print(f"Processing {pred_date.strftime('%B %Y')}...")
+    
+    # Create base dataframe for this month
+    month_data = pd.DataFrame({
+        'lsoa_code': lsoa_ward_mapping['lsoa_code'],
+        'ward_code': lsoa_ward_mapping['ward_code'],
+        'date': pred_date
+    })
+    
+    # Get the most recent features for each LSOA from the training/test data
+    # We'll use the last available data point for each LSOA to create features
+    latest_data = df_test_clean.groupby('lsoa_code').last().reset_index()
+    
+    # Merge to get base features (excluding columns we don't want to duplicate)
+    exclude_columns = ['date', 'pred', 'burglary_count', 'lsoa_code', 'ward_code']
+    feature_columns = [col for col in latest_data.columns if col not in exclude_columns]
+    
+    month_data = month_data.merge(latest_data[['lsoa_code'] + feature_columns], 
+                                  on='lsoa_code', how='left')
+    
+    # Update temporal features for the prediction date
+    month_data['year'] = pred_date.year
+    month_data['month'] = pred_date.month
+    month_data['quarter'] = pred_date.quarter
+    month_data['sin_month'] = np.sin(2 * np.pi * pred_date.month / 12)
+    month_data['cos_month'] = np.cos(2 * np.pi * pred_date.month / 12)
+    month_data['sin_quarter'] = np.sin(2 * np.pi * pred_date.quarter / 4)
+    month_data['cos_quarter'] = np.cos(2 * np.pi * pred_date.quarter / 4)
+    month_data['is_winter'] = (pred_date.month in [12,1,2])
+    month_data['is_summer'] = (pred_date.month in [6,7,8])
+    month_data['covid_dummy'] = 0  # Assuming post-COVID period
+    
+    # For predictions, we need to be careful about lag features
+    # We'll use the most recent available data as our "lag" features
+    # This simulates what would be available in real-time prediction
+    
+    # Prepare features for prediction
+    prediction_features = month_data[available_features].copy()
+    
+    # Handle any missing values with the same imputer used in training
+    prediction_features_imputed = pd.DataFrame(
+        final_imputer.transform(prediction_features), 
+        columns=available_features, 
+        index=prediction_features.index
+    )
+    
+    # Generate predictions
+    month_predictions = final_model.predict(prediction_features_imputed)
+    
+    # Get actual values if available (Jan and Feb 2025 might have actual data)
+    actual_values = None
+    if pred_date <= pd.Timestamp('2025-02-28'):
+        # Try to get actual values from the original dataset
+        # Note: This assumes the data might extend into 2025
+        try:
+            # Read actual data for comparison (if available)
+            actual_month_data = df_test_clean[df_test_clean['date'].dt.to_period('M') == pred_date.to_period('M')]
+            if len(actual_month_data) > 0:
+                actual_values = month_data.merge(
+                    actual_month_data[['lsoa_code', 'burglary_count']], 
+                    on='lsoa_code', how='left'
+                )['burglary_count'].values
+            else:
+                actual_values = None
+        except:
+            actual_values = None
+    
+    # Create results for this month
+    month_results = pd.DataFrame({
+        'date': pred_date.strftime('%Y-%m-%d'),
+        'month_year': pred_date.strftime('%B %Y'),
+        'lsoa_code': month_data['lsoa_code'],
+        'ward_code': month_data['ward_code'],
+        'predicted_burglaries': np.round(month_predictions, 2),
+        'actual_burglaries': actual_values if actual_values is not None else np.nan
+    })
+    
+    prediction_results.append(month_results)
+
+# Combine all predictions
+final_predictions_df = pd.concat(prediction_results, ignore_index=True)
+
+# Sort by date and LSOA
+final_predictions_df = final_predictions_df.sort_values(['date', 'lsoa_code']).reset_index(drop=True)
+
+# Add standardized predicted burglaries (0-1 scale) within each month
+print("Adding percentile-based risk scores (0-1 scale)...")
+def standardize_within_month(group):
+    """Create percentile-based risk scores within each month for better distribution"""
+    predictions = group['predicted_burglaries']
+    
+    # Use rank-based percentile scoring for better distribution
+    group['standardized_predicted_burglaries'] = predictions.rank(method='min') / len(predictions)
+    
+    return group
+
+# Apply percentile-based standardization within each month
+final_predictions_df = final_predictions_df.groupby('month_year').apply(standardize_within_month).reset_index(drop=True)
+
+# Round standardized values to 4 decimal places for readability
+final_predictions_df['standardized_predicted_burglaries'] = final_predictions_df['standardized_predicted_burglaries'].round(4)
+
+print(f"✅ Generated predictions for {len(final_predictions_df)} LSOA-months")
+print(f"   Unique LSOAs: {final_predictions_df['lsoa_code'].nunique()}")
+print(f"   Unique Wards: {final_predictions_df['ward_code'].nunique()}")
+
+# Display sample of predictions with standardized values
+print(f"\n📊 SAMPLE PREDICTIONS (with percentile-based risk scores):")
+sample_predictions = final_predictions_df.head(10)
+for _, row in sample_predictions.iterrows():
+    actual_str = f", Actual: {row['actual_burglaries']:.1f}" if not pd.isna(row['actual_burglaries']) else ", Actual: N/A"
+    print(f"   {row['month_year']} - {row['lsoa_code']} (Ward: {row['ward_code']})")
+    print(f"      Predicted: {row['predicted_burglaries']:.2f}, Risk Score: {row['standardized_predicted_burglaries']:.4f}{actual_str}")
+
+# Calculate summary statistics by month
+print(f"\n📈 MONTHLY SUMMARY (with percentile-based risk scores):")
+for month in final_predictions_df['month_year'].unique():
+    month_data = final_predictions_df[final_predictions_df['month_year'] == month]
+    pred_total = month_data['predicted_burglaries'].sum()
+    pred_mean = month_data['predicted_burglaries'].mean()
+    std_min = month_data['standardized_predicted_burglaries'].min()
+    std_max = month_data['standardized_predicted_burglaries'].max()
+    std_mean = month_data['standardized_predicted_burglaries'].mean()
+    
+    # Count LSOAs in different risk categories
+    high_risk = (month_data['standardized_predicted_burglaries'] >= 0.8).sum()
+    medium_risk = ((month_data['standardized_predicted_burglaries'] >= 0.5) & 
+                   (month_data['standardized_predicted_burglaries'] < 0.8)).sum()
+    low_risk = (month_data['standardized_predicted_burglaries'] < 0.5).sum()
+    
+    print(f"   {month}:")
+    print(f"      Raw Predictions - Total: {pred_total:.1f}, Mean: {pred_mean:.2f}")
+    print(f"      Risk Scores - Min: {std_min:.4f}, Max: {std_max:.4f}, Mean: {std_mean:.4f}")
+    print(f"      Risk Distribution - High (≥0.8): {high_risk}, Medium (0.5-0.8): {medium_risk}, Low (<0.5): {low_risk}")
+    
+    if not month_data['actual_burglaries'].isna().all():
+        actual_total = month_data['actual_burglaries'].sum()
+        actual_mean = month_data['actual_burglaries'].mean()
+        print(f"      Actual - Total: {actual_total:.1f}, Mean: {actual_mean:.2f}")
+    else:
+        print(f"      (No actual data available)")
+
+# Show top 10 highest risk LSOAs for each month
+print(f"\n🚨 TOP 10 HIGHEST RISK LSOAs BY MONTH (percentile-based):")
+for month in final_predictions_df['month_year'].unique():
+    month_data = final_predictions_df[final_predictions_df['month_year'] == month]
+    top_10 = month_data.nlargest(10, 'standardized_predicted_burglaries')
+    
+    print(f"   {month}:")
+    for i, (_, row) in enumerate(top_10.iterrows(), 1):
+        print(f"      {i:2d}. {row['lsoa_code']} (Ward: {row['ward_code']}) - "
+              f"Raw: {row['predicted_burglaries']:.2f}, Risk Score: {row['standardized_predicted_burglaries']:.4f}")
+
+# Save predictions to CSV
+csv_filename = 'burglary_predictions_2025_jan_feb_mar.csv'
+final_predictions_df.to_csv(csv_filename, index=False)
+
+print(f"\n💾 PREDICTIONS SAVED TO: {csv_filename}")
+print(f"   Columns: {list(final_predictions_df.columns)}")
+print(f"   Shape: {final_predictions_df.shape}")
+print(f"   ✅ Includes percentile-based risk scores (0-1 scale) for better priority ranking")
+print(f"   ✅ Risk scores show relative ranking within each month")
+
+print(f"\n💾 PREDICTIONS SAVED TO: {csv_filename}")
+print(f"   Columns: {list(final_predictions_df.columns)}")
+print(f"   Shape: {final_predictions_df.shape}")
+
 # Save final results
 ward_agg.to_csv('final_ward_predictions_hours_worked.csv', index=False)
 importance_df.to_csv('final_feature_importance_hours_worked.csv', index=False)
 
 print(f"\n🎉 FINAL MODEL COMPLETE - ZERO DATA LEAKAGE")
 print(f"🏆 WARD R² = {ward_r2:.4f} - PERFECT FOR POLICE RESOURCE ALLOCATION")
-print(f"💾 Final results saved to CSV files")
+print(f"🔮 2025 PREDICTIONS GENERATED FOR OPERATIONAL USE")
+print(f"💾 All results saved to CSV files")
 print("="*70)
