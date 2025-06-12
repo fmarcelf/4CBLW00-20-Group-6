@@ -9,9 +9,11 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from pulp import LpProblem, LpMaximize, LpVariable, lpSum, LpInteger, PULP_CBC_CMD
 import textwrap
+import time
 
 # Load burglary data
 df = pd.read_csv("Burglary Data - One row per LSOA CSV.csv")
+df_predictions = pd.read_csv("burglary_predictions_2025_jan_feb_mar.csv")
 
 tasks = {
     1: {"name": "Drive around the assigned LSOA", "default_minutes": 5, "scales_with_area": True},
@@ -21,12 +23,16 @@ tasks = {
     5: {"name": "Other (e.g., CCTV, notes)", "default_minutes": 60, "scales_with_area": False}
 }
 
-def get_upcoming_months():
-    today = datetime.date.today()
+def get_month_year_range():
+    today = pd.Timestamp.today().normalize().replace(day=1)
+    start_month = today - pd.DateOffset(months=5)
+    end_month = today + pd.DateOffset(months=6)
+
     months = []
-    for i in range(3):
-        month_date = today.replace(day=1) + pd.DateOffset(months=i)
-        months.append(calendar.month_name[month_date.month])
+    current = end_month
+    while current >= start_month:
+        months.append(current.strftime("%B %Y"))  # Full month name + year, e.g. February 2025
+        current -= pd.DateOffset(months=1)
     return months
 
 def calculate_Ci(row, user_tasks):
@@ -73,30 +79,53 @@ if st.button("Start optimization process for ward"):
 
 if st.session_state.start:
     st.subheader("Choose target month")
-    selected_month = st.selectbox("Select month", get_upcoming_months())
+    selected_month = st.selectbox("Select month", get_month_year_range())
 
     st.subheader("Task Parameters")
     user_tasks = {}
     for i in range(1, 6):
-        st.markdown(f"*Task {i}: {tasks[i]['name']}*")
+        st.markdown(f"Task {i}: {tasks[i]['name']}")
         minutes = st.number_input(f"Minutes for Task {i}", value=float(tasks[i]['default_minutes']), min_value=0.0, key=f"min_{i}")
         scales_with_area = st.radio(f"Scales with area/per hectare?", ["Yes", "No"], index=0 if tasks[i]["scales_with_area"] else 1, key=f"scale_{i}")
         user_tasks[i] = {"minutes": minutes, "scales_with_area": scales_with_area == "Yes"}
 
     if st.button(f"✅ Optimize allocation for {selected_ward_name} ({selected_ward_code})"):
-        with st.spinner("Solving ILP and generating report..."):
-            import time
+        with st.spinner("Processing..."):
+            step_box = st.empty()
+
+            step_box.markdown("🔄 Predicting burglaries...")
             time.sleep(3)
+            step_box.markdown("✅ Predicting burglaries")
+
+            step_box.markdown("🔄 Calculating risk factors...")
+            time.sleep(2)
+            step_box.markdown("✅ Calculating risk factors")
+
+            step_box.markdown("🔄 Solving ILP...")
+            time.sleep(3)
+            step_box.markdown("✅ Solving ILP")
+
+            step_box.markdown("🔄 Generating report...")
+            time.sleep(1)
+            step_box.markdown("Successfully Processed")
 
             ward_df["Ci"] = ward_df.apply(lambda row: calculate_Ci(row, user_tasks), axis=1)
             lsoa_ids = ward_df["LSOA code"].tolist()
             ci_values = dict(zip(ward_df["LSOA code"], ward_df["Ci"]))
             lsoa_names = dict(zip(ward_df["LSOA code"], ward_df["LSOA name"]))
+            df_month = df_predictions[df_predictions["month_year"] == selected_month]
 
             shifts = list(range(8))
             shift_labels = ["06–08", "08–10", "10–12", "12–14", "14–16", "16–18", "18–20", "20–22"]
-            shift_weights = [0.8, 0.9, 0.95, 1.0, 1.1, 1.15, 1.2, 1.3]
-            risk_factor = {(i, t): 1.25 * shift_weights[t] for i in lsoa_ids for t in shifts}
+            shift_weights = [1.13, 1.13, 1.13, 1.33, 1.33, 1.33, 1.53, 1.53]
+
+            risk_factors_for_month = dict(zip(df_month["lsoa_code"], df_month["standardized_predicted_burglaries"]))
+
+            risk_factor = {
+                (i, t): (risk_factors_for_month.get(i, 0.005) * shift_weights[t])
+                for i in lsoa_ids
+                for t in shifts
+            }
 
             prob = LpProblem("Officer_Allocation", LpMaximize)
             X = {(i, t): LpVariable(f"x_{i}_{t}", lowBound=0, cat=LpInteger) for i in lsoa_ids for t in shifts}
@@ -118,10 +147,14 @@ if st.session_state.start:
             }
 
             now = datetime.datetime.now()
-            selected_month_index = list(calendar.month_name).index(selected_month)
-            display_year = now.year + 1 if now.month > selected_month_index else now.year
-            month_year_label = f"{selected_month} {display_year}"
-            pdf_filename = f"{selected_ward_name.replace(' ', '_')}_{selected_ward_code}_{selected_month}_{display_year}.pdf"
+
+            # Extract only the month name part from the full "January 2025" string
+            month_name_only = selected_month.split()[0]  # Take first word as month name
+
+            selected_month_index = list(calendar.month_name).index(month_name_only)
+            display_year = selected_month.split()[1]
+            month_year_label = f"{month_name_only} {display_year}"
+            pdf_filename = f"{selected_ward_name.replace(' ', '')}_{selected_ward_code}_{month_name_only}_{display_year}.pdf"
 
             with PdfPages(pdf_filename) as pdf:
                 # Page 1
@@ -137,8 +170,17 @@ if st.session_state.start:
                 fig, ax = plt.subplots(figsize=(11.7, 8.3))
                 ax.axis('off')
                 ax.set_title(f"LSOAs Overview for {selected_ward_name}", fontsize=18, loc='center', pad=20)
-                table_data = ward_df[["LSOA name", "ward name", "LSOA Area Size (HA)", "Ci"]].head(20)
-                col_labels = ["LSOA Name", "Ward Name", "Area Size (HA)", "Officer Allocation (Ci)"]
+                ward_df = ward_df.merge(
+                    df_month[["lsoa_code", "standardized_predicted_burglaries"]],
+                    left_on="LSOA code",
+                    right_on="lsoa_code",
+                    how="left"
+                )
+                ward_df["standardized_predicted_burglaries"].fillna(0.005, inplace=True)
+                table_data = ward_df[
+                    ["LSOA name", "ward name", "LSOA Area Size (HA)", "Ci", "standardized_predicted_burglaries"]].head(
+                    20)
+                col_labels = ["LSOA Name", "Ward Name", "Area Size (HA)", "Officer Allocation (Ci)", "Standardized Risk Factor"]
                 table = ax.table(cellText=table_data.values, colLabels=col_labels,
                                  cellLoc='center', loc='upper left', bbox=[0.05, 0.4, 0.9, 0.5])
                 for key, cell in table.get_celld().items():
