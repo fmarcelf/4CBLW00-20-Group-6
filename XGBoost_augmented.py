@@ -10,6 +10,9 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from sklearn.cluster import KMeans
 from sklearn.impute import SimpleImputer
 import matplotlib.pyplot as plt
+import shap
+import seaborn as sns
+import os
 
 # ==============================================================================
 # BURGLARY PREDICTION MODEL - ABSOLUTELY NO DATA LEAKAGE
@@ -26,40 +29,35 @@ print("=" * 60)
 print("📊 Loading raw data...")
 
 df = pd.read_csv(
-    r"C:/Users/20232553/Downloads/burglaries_with_accom_and_hours_props.csv",
-    usecols=['LSOA code','Ward code','Date','Burglary Count','covid_period',
-             'LSOA Area Size (HA)','Overall Ranking - IMD','Housing rank',
-             'Health rank','Living environment rank','Education rank',
-             'Income rank','Employment rank',
-             # NEW: Accommodation type proportions
-             'prop_Detached','prop_Semi_detached','prop_Terraced',
-             'prop_Purpose_built_flat','prop_Flat_converted_shared',
-             'prop_Flat_commercial_building','prop_Caravan_other',
-             # NEW: Hours worked proportions
-             'prop_hrs_15_or_less','prop_hrs_16_30','prop_hrs_31_48','prop_hrs_49_more'],
-    dtype={'LSOA code':'str','Ward code':'str','Burglary Count':'int16',
-           'covid_period':'int8','LSOA Area Size (HA)':'float32',
-           'Overall Ranking - IMD':'float32','Housing rank':'float32',
-           'Health rank':'float32','Living environment rank':'float32',
-           'Education rank':'float32','Income rank':'float32','Employment rank':'float32',
-           # NEW: Accommodation and hours worked dtypes
-           'prop_Detached':'float32','prop_Semi_detached':'float32','prop_Terraced':'float32',
-           'prop_Purpose_built_flat':'float32','prop_Flat_converted_shared':'float32',
-           'prop_Flat_commercial_building':'float32','prop_Caravan_other':'float32',
-           'prop_hrs_15_or_less':'float32','prop_hrs_16_30':'float32',
-           'prop_hrs_31_48':'float32','prop_hrs_49_more':'float32'},
+    "data/burglaries_with_accomodation_proportions.csv",
+    usecols=['LSOA code', 'Ward code', 'Date', 'Burglary Count', 'covid_period',
+             'LSOA Area Size (HA)', 'Overall Ranking - IMD', 'Housing rank',
+             'Health rank', 'Living environment rank', 'Education rank',
+             'Income rank', 'Employment rank',
+             # Accommodation type proportions
+             'prop_Detached', 'prop_Semi_detached', 'prop_Terraced',
+             'prop_Purpose_built_flat', 'prop_Flat_converted_shared',
+             'prop_Flat_commercial_building', 'prop_Caravan_other'],
+    dtype={'LSOA code': 'str', 'Ward code': 'str', 'Burglary Count': 'int16',
+           'covid_period': 'int8', 'LSOA Area Size (HA)': 'float32',
+           'Overall Ranking - IMD': 'float32', 'Housing rank': 'float32',
+           'Health rank': 'float32', 'Living environment rank': 'float32',
+           'Education rank': 'float32', 'Income rank': 'float32', 'Employment rank': 'float32',
+           # Accommodation dtypes
+           'prop_Detached': 'float32', 'prop_Semi_detached': 'float32', 'prop_Terraced': 'float32',
+           'prop_Purpose_built_flat': 'float32', 'prop_Flat_converted_shared': 'float32',
+           'prop_Flat_commercial_building': 'float32', 'prop_Caravan_other': 'float32'},
     parse_dates=['Date']
 )
 
 # Basic renaming only
 df.rename(columns={
-    'LSOA code':'lsoa_code','Ward code':'ward_code',
-    'Burglary Count':'burglary_count','Date':'date',
-    'LSOA Area Size (HA)':'area_ha','Overall Ranking - IMD':'imd_overall',
-    'Housing rank':'imd_housing','Health rank':'imd_health',
-    'Living environment rank':'imd_living_env','Education rank':'imd_education',
-    'Income rank':'imd_income','Employment rank':'imd_employment'
-    # NEW: Keep accommodation and hours worked variable names as they are (already clean)
+    'LSOA code': 'lsoa_code', 'Ward code': 'ward_code',
+    'Burglary Count': 'burglary_count', 'Date': 'date',
+    'LSOA Area Size (HA)': 'area_ha', 'Overall Ranking - IMD': 'imd_overall',
+    'Housing rank': 'imd_housing', 'Health rank': 'imd_health',
+    'Living environment rank': 'imd_living_env', 'Education rank': 'imd_education',
+    'Income rank': 'imd_income', 'Employment rank': 'imd_employment'
 }, inplace=True)
 
 df.sort_values(['lsoa_code','date'], inplace=True)
@@ -190,17 +188,15 @@ df_test = add_imd_interactions(df_test)
 
 print("✅ IMD features processed with NO leakage")
 
-# 6) NEW: ACCOMMODATION & HOURS FEATURES - FIT ON TRAIN ONLY
+# 6) NEW: ACCOMMODATION FEATURES - FIT ON TRAIN ONLY
 # ==============================================================================
-print("\n🏠 ACCOMMODATION & HOURS FEATURES - STRICT TRAIN-ONLY FITTING")
+print("\n🏠 ACCOMMODATION FEATURES - STRICT TRAIN-ONLY FITTING")
 print("-" * 50)
 
-# Define the new feature columns
+# Define the accommodation feature columns
 accommodation_cols = ['prop_Detached','prop_Semi_detached','prop_Terraced',
                      'prop_Purpose_built_flat','prop_Flat_converted_shared',
                      'prop_Flat_commercial_building','prop_Caravan_other']
-
-hours_cols = ['prop_hrs_15_or_less','prop_hrs_16_30','prop_hrs_31_48','prop_hrs_49_more']
 
 # Fit imputer ONLY on training data for accommodation features
 print("Fitting accommodation imputer on TRAINING data only...")
@@ -209,15 +205,8 @@ df_train[accommodation_cols] = accom_imputer.fit_transform(df_train[accommodatio
 print("Applying fitted accommodation imputer to TEST data...")
 df_test[accommodation_cols] = accom_imputer.transform(df_test[accommodation_cols])
 
-# Fit imputer ONLY on training data for hours worked features
-print("Fitting hours worked imputer on TRAINING data only...")
-hours_imputer = SimpleImputer(strategy='median')
-df_train[hours_cols] = hours_imputer.fit_transform(df_train[hours_cols])
-print("Applying fitted hours worked imputer to TEST data...")
-df_test[hours_cols] = hours_imputer.transform(df_test[hours_cols])
-
-# Create safe interactions with new features
-def add_accommodation_hours_interactions(df_input):
+# Create safe interactions with accommodation features
+def add_accommodation_interactions(df_input):
     df_out = df_input.copy()
     
     # Accommodation interactions
@@ -227,18 +216,12 @@ def add_accommodation_hours_interactions(df_input):
                            df_out['prop_Flat_commercial_building'])
     df_out['flat_total_x_income'] = df_out['flat_total'] * df_out['imd_income']
     
-    # Hours worked interactions
-    df_out['long_hours'] = df_out['prop_hrs_49_more']
-    df_out['short_hours'] = df_out['prop_hrs_15_or_less']
-    df_out['work_intensity'] = df_out['long_hours'] - df_out['short_hours']
-    df_out['work_intensity_x_covid'] = df_out['work_intensity'] * df_out['covid_dummy']
-    
     return df_out
 
-df_train = add_accommodation_hours_interactions(df_train)
-df_test = add_accommodation_hours_interactions(df_test)
+df_train = add_accommodation_interactions(df_train)
+df_test = add_accommodation_interactions(df_test)
 
-print("✅ Accommodation & Hours features processed with NO leakage")
+print("✅ Accommodation features processed with NO leakage")
 
 # 7) WARD FEATURES - HISTORICAL ONLY
 # ==============================================================================
@@ -352,13 +335,6 @@ feature_columns = [
     'prop_Purpose_built_flat', 'prop_Flat_converted_shared',
     'prop_Flat_commercial_building', 'prop_Caravan_other',
     
-    # NEW: Hours worked (preprocessed safely)
-    'prop_hrs_15_or_less', 'prop_hrs_16_30', 'prop_hrs_31_48', 'prop_hrs_49_more',
-    
-    # NEW: Accommodation & Hours interactions (safe)
-    'detached_x_covid', 'flat_total', 'flat_total_x_income',
-    'long_hours', 'short_hours', 'work_intensity', 'work_intensity_x_covid',
-    
     # Target encoding (fitted on train)
     'lsoa_target_enc', 'ward_target_enc', 'month_target_enc'
 ]
@@ -458,6 +434,112 @@ final_model.fit(X_train_final, y_train)
 test_predictions = final_model.predict(X_test_final)
 df_test_clean['pred'] = test_predictions
 
+# Calculate test set metrics
+test_r2 = r2_score(y_test, test_predictions)
+test_mae = mean_absolute_error(y_test, test_predictions)
+test_rmse = np.sqrt(mean_squared_error(y_test, test_predictions))
+
+print("\n" + "="*60)
+print("📊 TEST SET PERFORMANCE")
+print("="*60)
+print(f"Test R²:   {test_r2:.4f}")
+print(f"Test MAE:  {test_mae:.2f}")
+print(f"Test RMSE: {test_rmse:.2f}")
+print("="*60)
+
+# SHAP Values Analysis
+# ==============================================================================
+print("\n" + "="*60)
+print("🔍 SHAP VALUES ANALYSIS")
+print("="*60)
+
+# Create SHAP explainer
+print("Computing SHAP values...")
+explainer = shap.TreeExplainer(final_model)
+
+# Calculate SHAP values for test set
+shap_values = explainer.shap_values(X_test_final)
+
+# Create SHAP summary plot
+plt.figure(figsize=(12, 8))
+shap.summary_plot(
+    shap_values, 
+    X_test_final,
+    plot_type="bar",
+    show=False
+)
+plt.title("Feature Importance (SHAP Values)")
+plt.tight_layout()
+plt.savefig('shap_feature_importance.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+# Create detailed SHAP summary plot
+plt.figure(figsize=(12, 8))
+shap.summary_plot(
+    shap_values, 
+    X_test_final,
+    show=False
+)
+plt.title("SHAP Value Distribution")
+plt.tight_layout()
+plt.savefig('shap_value_distribution.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+# Calculate mean absolute SHAP values for each feature
+mean_shap_values = np.abs(shap_values).mean(axis=0)
+shap_importance = pd.DataFrame({
+    'Feature': X_test_final.columns,
+    'Mean |SHAP|': mean_shap_values
+})
+shap_importance = shap_importance.sort_values('Mean |SHAP|', ascending=False)
+
+print("\nTop 15 Most Important Features (SHAP Values):")
+print(shap_importance.head(15).to_string(index=False))
+
+# Save SHAP importance to CSV
+output_dir = 'output_csv_files'
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+shap_importance.to_csv(os.path.join(output_dir, 'shap_feature_importance.csv'), index=False)
+print("\n✅ SHAP analysis complete - plots and CSV saved")
+
+# Create Feature Importance Heatmap
+# ==============================================================================
+print("\n" + "="*60)
+print("🎨 FEATURE IMPORTANCE HEATMAP")
+print("="*60)
+
+# Create correlation matrix for top features
+top_n_features = 15  # Number of top features to include
+top_features = shap_importance['Feature'].head(top_n_features).tolist()
+
+# Calculate correlation matrix for top features
+correlation_matrix = X_test_final[top_features].corr()
+
+# Create heatmap using seaborn for better visualization
+plt.figure(figsize=(15, 12))
+sns.heatmap(correlation_matrix, 
+            annot=True,  # Show correlation values
+            cmap='coolwarm',  # Color scheme
+            center=0,  # Center the colormap at 0
+            fmt='.2f',  # Format correlation values to 2 decimal places
+            square=True,  # Make the plot square
+            cbar_kws={'label': 'Correlation'})
+
+# Rotate x-axis labels for better readability
+plt.xticks(rotation=45, ha='right')
+plt.yticks(rotation=0)
+
+plt.title('Feature Correlation Heatmap (Top 15 Features)', pad=20)
+plt.tight_layout()
+
+# Save the heatmap
+heatmap_path = os.path.join(output_dir, 'feature_correlation_heatmap.png')
+plt.savefig(heatmap_path, dpi=300, bbox_inches='tight')
+plt.close()
+
+print(f"✅ Feature correlation heatmap saved as '{heatmap_path}'")
+
 # 12) WARD-LEVEL ANALYSIS
 # ==============================================================================
 print("\n" + "="*60)
@@ -537,21 +619,6 @@ print(f"\n🔍 TOP 15 FEATURES:")
 for i, (_, row) in enumerate(importance_df.head(15).iterrows(), 1):
     print(f"{i:2d}. {row['feature']:<25} {row['importance']:.4f}")
 
-# Analyze new feature performance
-print(f"\n🏠 NEW ACCOMMODATION FEATURES IMPORTANCE:")
-accom_features = [f for f in importance_df['feature'] if any(x in f for x in ['prop_Detached', 'prop_Semi', 'prop_Terraced', 'prop_Purpose', 'prop_Flat', 'prop_Caravan', 'flat_total', 'detached_x'])]
-for feat in accom_features:
-    imp = importance_df[importance_df['feature'] == feat]['importance'].iloc[0]
-    rank = importance_df[importance_df['feature'] == feat].index[0] + 1
-    print(f"  {feat:<25} {imp:.4f} (rank #{rank})")
-
-print(f"\n⏰ NEW HOURS WORKED FEATURES IMPORTANCE:")
-hours_features = [f for f in importance_df['feature'] if any(x in f for x in ['prop_hrs', 'long_hours', 'short_hours', 'work_intensity'])]
-for feat in hours_features:
-    imp = importance_df[importance_df['feature'] == feat]['importance'].iloc[0]
-    rank = importance_df[importance_df['feature'] == feat].index[0] + 1
-    print(f"  {feat:<25} {imp:.4f} (rank #{rank})")
-
 # Final summary
 covid_count = df_test_clean[df_test_clean['covid_period']==1].shape[0]
 total_count = df_test_clean.shape[0]
@@ -563,8 +630,7 @@ print(f"🏘️ Ward R²:        {ward_r2:.4f}")
 print(f"📊 Ward MAE:       {ward_mae:.2f}")
 print(f"🔄 CV R²:          {cv_mean:.4f} ± {cv_std:.4f}")
 print(f"🎯 Total Features: {len(available_features)}")
-print(f"🏠 Accommodation:  {len(accom_features)} features")
-print(f"⏰ Hours Worked:   {len(hours_features)} features")
+print(f"🏠 Accommodation:  {len(accommodation_cols)} features")
 print(f"📚 Train samples:  {len(X_train_final):,}")
 print(f"🧪 Test samples:   {len(X_test_final):,}")
 print(f"🦠 COVID in test:  {covid_count:,} / {total_count:,} ({100*covid_count/total_count:.1f}%)")
@@ -574,8 +640,6 @@ print(f"   ✅ Temporal split FIRST")
 print(f"   ✅ All preprocessing fit on train only")
 print(f"   ✅ Target encoding fit on train only")
 print(f"   ✅ Accommodation features fit on train only")
-print(f"   ✅ Hours worked features fit on train only")
-print(f"   ✅ All imputation fit on train only")
 print(f"   ✅ Only historical lag features used")
 print(f"   ✅ Conservative model parameters")
 print("="*60)
