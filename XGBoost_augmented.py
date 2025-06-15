@@ -28,7 +28,7 @@ print("📊 Loading raw data...")
 df = pd.read_csv(
     r"C:/Users/20232553/Downloads/burglaries_with_accom_and_hours_props.csv",
     usecols=['LSOA code','Ward code','Date','Burglary Count','covid_period',
-             'LSOA Area Size (HA)','Overall Ranking - IMD','Housing rank',
+             'LSOA Area Size (HA)', 'Housing rank',
              'Health rank','Living environment rank','Education rank',
              'Income rank','Employment rank',
              # NEW: Accommodation type proportions
@@ -38,8 +38,7 @@ df = pd.read_csv(
              # NEW: Hours worked proportions
              'prop_hrs_15_or_less','prop_hrs_16_30','prop_hrs_31_48','prop_hrs_49_more'],
     dtype={'LSOA code':'str','Ward code':'str','Burglary Count':'int16',
-           'covid_period':'int8','LSOA Area Size (HA)':'float32',
-           'Overall Ranking - IMD':'float32','Housing rank':'float32',
+           'covid_period':'int8','LSOA Area Size (HA)':'float32', 'Housing rank':'float32',
            'Health rank':'float32','Living environment rank':'float32',
            'Education rank':'float32','Income rank':'float32','Employment rank':'float32',
            # NEW: Accommodation and hours worked dtypes
@@ -55,7 +54,7 @@ df = pd.read_csv(
 df.rename(columns={
     'LSOA code':'lsoa_code','Ward code':'ward_code',
     'Burglary Count':'burglary_count','Date':'date',
-    'LSOA Area Size (HA)':'area_ha','Overall Ranking - IMD':'imd_overall',
+    'LSOA Area Size (HA)':'area_ha',
     'Housing rank':'imd_housing','Health rank':'imd_health',
     'Living environment rank':'imd_living_env','Education rank':'imd_education',
     'Income rank':'imd_income','Employment rank':'imd_employment'
@@ -168,7 +167,7 @@ print("✅ Lag features added")
 print("\n🏘️ IMD FEATURES - STRICT TRAIN-ONLY FITTING")
 print("-" * 50)
 
-imd_cols = ['imd_overall','imd_housing','imd_health','imd_living_env',
+imd_cols = ['imd_housing','imd_health','imd_living_env',
             'imd_education','imd_income','imd_employment']
 
 # Fit imputer ONLY on training data
@@ -340,7 +339,7 @@ feature_columns = [
     'ward_lag1', 'ward_lag12',
     
     # IMD (preprocessed safely)
-    'imd_overall', 'imd_housing', 'imd_health', 'imd_living_env',
+    'imd_housing', 'imd_health', 'imd_living_env',
     'imd_education', 'imd_income', 'imd_employment',
     'income_x_education', 'covid_x_income',
     
